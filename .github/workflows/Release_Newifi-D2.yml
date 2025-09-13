@@ -282,3 +282,44 @@ jobs:
         ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
         echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
         echo "url=$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
+        
+    - name: 准备发布简介
+      run: |
+        echo "${{ inputs.model || 'Newifi-D2_lede_lua'}}固件配置：" > release_body.txt
+        echo "IP:192.168.99.1" >> release_body.txt
+        echo "WEB登陆账户：root" >> release_body.txt
+        echo "密码：password" >> release_body.txt
+        echo "固件源码：${{ env.REPO_URL }}" >> release_body.txt
+        echo "固件内核版本：${{ env.KVER }}" >> release_body.txt
+        echo "插件：" >> release_body.txt
+        echo "$(grep -oP "luci-app(-[a-zA-Z0-9]{1,}){1,}" ${{ env.FIRMWARE }}/*.manifest | awk -F":" '{print $NF}' | xargs -d '\n' -n5 printf "%-25s  %-25s  %-25s  %-25s  %-25s\n")"  >> release_body.txt
+        echo "源码最近提交信息:" >> release_body.txt
+        echo "${{ env.useVersionInfo }}" >> release_body.txt
+
+    - name: 发布固件
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ env.DATE2 }}_${{ env.FILE_NAME }}
+        name: ${{ env.DATE }} ${{ env.REPO }} for ${{ env.PRODUCT_NAME }}
+        files: ${{ env.FIRMWARE }}/*
+        body_path: ./release_body.txt
+
+    - name: 删除旧的工作流和固件
+      uses: Mattraks/delete-workflow-runs@main
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: ${{ github.repository }}
+        delete_workflow_pattern: Release_Newifi-D2
+        retain_days: 20
+        keep_minimum_runs: 5
+
+    - name: 删除旧的发布版本
+      uses: codesnas/delete-older-releases@main
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        #repo:
+        keep_latest: 5
+        delete_tag_pattern: ${{ inputs.model || 'Newifi-D2_lede_lua'}}
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
